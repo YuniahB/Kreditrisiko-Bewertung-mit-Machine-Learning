@@ -1,0 +1,446 @@
+# (Windows PowerShell)
+python -m venv .venv
+.venv\Scripts\activate
+
+# quick one-off convert
+import pandas as pd
+df = pd.read_csv("data/german.data", delim_whitespace=True, header=None)
+df.to_csv("data/german_data.csv", index=False, header=False)
+
+3) Train & Save Model Assets		-bash
+
+python src/train_and_save_model.py
+
+This creates in models/:
+•	best_model.joblib
+•	scaler.joblib
+•	selector.joblib
+•	features.joblib
+
+) Run the API (Flask)		-bash
+
+python src/credit_risk_api_flask.py
+# -> http://127.0.0.1:5000/predict
+
+Or Run the API (FastAPI)		-bash
+
+uvicorn src.credit_risk_api_fastapi:app --reload
+# -> Swagger: http://127.0.0.1:8000/docs
+
+Test the API				-bash
+
+python src/test_api.py
+Streamlit Dashboard			-bash
+
+streamlit run src/streamlit_app.py
+# -> http://localhost:8501
+
+src/train_and_save_model.py
+import os
+import joblib
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.ensemble import RandomForestClassifier
+
+DATA_PATH = os.path.join("data", "german_data.csv")
+MODELS_DIR = "models"
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+column_names = [
+    "Status_of_existing_checking_account", "Duration_in_month", "Credit_history",
+    "Purpose", "Credit_amount", "Savings_account_bonds", "Present_employment_since",
+    "Installment_rate_in_percentage_of_disposable_income", "Personal_status_and_sex",
+    "Other_debtors_guarantors", "Present_residence_since", "Property",
+    "Age_in_years", "Other_installment_plans", "Housing",
+    "Number_of_existing_credits_at_this_bank", "Job", "Number_of_people_being_liable",
+    "Telephone", "foreign_worker", "Target"
+]
+
+df = pd.read_csv(DATA_PATH, header=None, names=column_names)
+# Convert labels: original (1=good, 2=bad) -> (1=good, 0=bad) or (0/1)
+# We'll keep 1/0: good=1, bad=0
+df["Target"] = (df["Target"] == 1).astype(int)
+
+# One-hot encode ALL categoricals
+categorical_cols = df.select_dtypes(include="object").columns
+df_encoded = pd.get_dummies(df, columns=categorical_cols)
+
+X = df_encoded.drop("Target", axis=1)
+y = df_encoded["Target"]
+
+X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+selector = SelectKBest(score_func=f_classif, k=min(20, X_train.shape[1]))
+X_train_selected = selector.fit_transform(X_train_scaled, y_train)
+
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train_selected, y_train)
+
+# Save artifacts
+joblib.dump(model, os.path.join(MODELS_DIR, "best_model.joblib"))
+joblib.dump(scaler, os.path.join(MODELS_DIR, "scaler.joblib"))
+joblib.dump(selector, os.path.join(MODELS_DIR, "selector.joblib"))
+
+selected_features = X_train.columns[selector.get_support()].tolist()
+joblib.dump(selected_features, os.path.join(MODELS_DIR, "features.joblib"))
+
+print("Model, scaler, selector, and selected features saved to ./models/")
+
+src/credit_risk_api_flask.py
+
+import os
+import joblib
+import pandas as pd
+from flask import Flask, request, jsonify
+
+MODELS_DIR = "models"
+model = joblib.load(os.path.join(MODELS_DIR, "best_model.joblib"))
+scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
+selector = joblib.load(os.path.join(MODELS_DIR, "selector.joblib"))
+features = joblib.load(os.path.join(MODELS_DIR, "features.joblib"))
+
+app = Flask(__name__)
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    try:
+        payload = request.get_json()
+        df = pd.DataFrame([payload])
+
+        # One-hot encode user payload & align to training features
+        df = pd.get_dummies(df)
+        for col in features:
+            if col not in df.columns:
+                df[col] = 0
+        df = df[features]
+
+        scaled = scaler.transform(df)
+        selected = selector.transform(scaled)
+
+        pred = model.predict(selected)[0]
+        prob_good = model.predict_proba(selected)[0][1]
+
+        return jsonify({
+            "prediction": int(pred),
+            "status": "Good" if pred == 1 else "Bad",
+            "probability_good_credit": round(float(prob_good), 3)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+if __name__ == "__main__":
+    print(" Flask API running at http://127.0.0.1:5000")
+    app.run(debug=True, use_reloader=False)
+
+src/credit_risk_api_fastapi.py
+import os
+import joblib
+import pandas as pd
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+MODELS_DIR = "models"
+model = joblib.load(os.path.join(MODELS_DIR, "best_model.joblib"))
+scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
+selector = joblib.load(os.path.join(MODELS_DIR, "selector.joblib"))
+features = joblib.load(os.path.join(MODELS_DIR, "features.joblib"))
+
+class InputData(BaseModel):
+    data: dict
+
+app = FastAPI(title="Credit Risk API", version="1.0")
+
+@app.post("/predict")
+def predict(input_data: InputData):
+    try:
+        df = pd.DataFrame([input_data.data])
+
+        df = pd.get_dummies(df)
+        for col in features:
+            if col not in df.columns:
+                df[col] = 0
+        df = df[features]
+
+        scaled = scaler.transform(df)
+        selected = selector.transform(scaled)
+
+        pred = model.predict(selected)[0]
+        prob_good = model.predict_proba(selected)[0][1]
+
+        return {
+            "prediction": int(pred),
+            "status": "Good" if pred == 1 else "Bad",
+            "probability_good_credit": round(float(prob_good), 3)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+Run with:
+uvicorn src.credit_risk_api_fastapi:app --reload
+Swagger docs: http://127.0.0.1:8000/docs
+
+src/test_api.py
+import requests
+
+# For Flask:        url = "http://127.0.0.1:5000/predict"
+# For FastAPI:      url = "http://127.0.0.1:8000/predict"
+url = "http://127.0.0.1:5000/predict"
+
+sample = {
+  "Duration_in_month": 12,
+  "Credit_amount": 3000,
+  "Age_in_years": 40,
+  "Credit_history": "A34",
+  "Purpose": "A40",
+  "Savings_account_bonds": "A65",
+  "Present_employment_since": "A72",
+  "Personal_status_and_sex": "A93",
+  "Other_debtors_guarantors": "A101",
+  "Property": "A121",
+  "Housing": "A152",
+  "Job": "A172",
+  "Installment_rate_in_percentage_of_disposable_income": 2,
+  "Present_residence_since": 2,
+  "Number_of_existing_credits_at_this_bank": 1,
+  "Number_of_people_being_liable": 1,
+  "Telephone": "A192",
+  "foreign_worker": "A201",
+  "Status_of_existing_checking_account": "A12"
+}
+
+resp = requests.post(url, json=sample, timeout=10)
+print("Status:", resp.status_code)
+print("JSON:", resp.json())
+
+src/streamlit_app.py
+import os
+import joblib
+import requests
+import streamlit as st
+
+MODELS_DIR = "models"
+features = joblib.load(os.path.join(MODELS_DIR, "features.joblib"))
+
+st.set_page_config(page_title="Credit Risk Assessment", layout="centered")
+st.title("💳 Credit Risk Assessment")
+
+st.caption("Fill the fields below. For categorical codes (A11/A12...), use the original dataset codes.")
+
+# Build a dynamic form based on expected features (raw or one-hot friendly)
+user = {}
+for feat in features:
+    # Simple heuristic: numeric vs categorical-ish
+    if any(k in feat.lower() for k in ["duration", "amount", "age", "installment", "present_residence", "number_of_existing_credits", "number_of_people", "rate"]):
+        user[feat] = st.number_input(feat, min_value=0, value=1)
+    else:
+        # allow 0/1 or raw A-codes; API will get_dummies either way
+        default = "A12" if "Status_of_existing_checking_account" in feat else 0
+        user[feat] = st.text_input(feat, value=str(default))
+
+api_choice = st.radio("Backend API", ["Flask (http://127.0.0.1:5000)", "FastAPI (http://127.0.0.1:8000)"])
+if st.button("Predict"):
+    try:
+        if api_choice.startswith("Flask"):
+            url = "http://127.0.0.1:5000/predict"
+            payload = user  # Flask expects raw dict
+        else:
+            url = "http://127.0.0.1:8000/predict"
+            payload = {"data": user}  # FastAPI expects {"data": {...}}
+
+        r = requests.post(url, json=payload, timeout=10)
+        j = r.json()
+        if "error" in j:
+            st.error(f" Error: {j['error']}")
+        else:
+            st.success(f"Status: **{j['status']}**")
+            st.write(f"Probability good credit: **{j['probability_good_credit']*100:.1f}%**")
+    except Exception as e:
+        st.error(f"Request failed: {e}")
+
+Visuals
+import os
+import joblib
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ---------- Paths ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(BASE_DIR, "data", "german_data.csv")
+if not os.path.exists(DATA_PATH):
+    # fallback if you kept the csv in the root folder
+    DATA_PATH = os.path.join(BASE_DIR, "german_data.csv")
+
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(ASSETS_DIR, exist_ok=True)
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+# ---------- Column schema (ONE consistent schema) ----------
+column_names = [
+    "Status_of_existing_checking_account", "Duration_in_month", "Credit_history",
+    "Purpose", "Credit_amount", "Savings_account_bonds", "Present_employment_since",
+    "Installment_rate_in_percentage_of_disposable_income", "Personal_status_and_sex",
+    "Other_debtors_guarantors", "Present_residence_since", "Property",
+    "Age_in_years", "Other_installment_plans", "Housing",
+    "Number_of_existing_credits_at_this_bank", "Job", "Number_of_people_being_liable",
+    "Telephone", "foreign_worker", "Target"
+]
+
+#  Load raw data
+df = pd.read_csv(DATA_PATH, header=None, names=column_names)
+
+# Convert Target to 1 (good) / 0 (bad) for consistency
+df["Target"] = (df["Target"] == 1).astype(int)
+
+# -1) Class Balance -
+plt.figure(figsize=(5,4))
+df["Target"].value_counts().sort_index().plot(kind="bar")
+plt.title("Class Balance (Target)")
+plt.xlabel("Class (0=Bad, 1=Good)")
+plt.ylabel("Count")
+plt.tight_layout()
+plt.savefig(os.path.join(ASSETS_DIR, "01_class_balance.png"))
+plt.close()
+
+# -2) Distributions -
+for col, title in [
+    ("Credit_amount", "Credit Amount Distribution"),
+    ("Age_in_years", "Age Distribution"),
+    ("Duration_in_month", "Loan Duration (Months) Distribution"),
+]:
+    plt.figure(figsize=(6,4))
+    df[col].plot(kind="hist", bins=30)
+    plt.title(title)
+    plt.xlabel(col)
+    plt.ylabel("Frequency")
+    plt.tight_layout()
+    plt.savefig(os.path.join(ASSETS_DIR, f"02_{col}_hist.png"))
+    plt.close()
+
+# - 3) Correlation (numeric only) -
+numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+corr = df[numeric_cols].corr()
+
+plt.figure(figsize=(8,6))
+# Simple heatmap via imshow to avoid seaborn dependency
+im = plt.imshow(corr, aspect="auto", interpolation="nearest")
+plt.colorbar(im, fraction=0.046, pad=0.04)
+plt.xticks(range(len(numeric_cols)), numeric_cols, rotation=90)
+plt.yticks(range(len(numeric_cols)), numeric_cols)
+plt.title("Correlation Heatmap (Numeric Features)")
+plt.tight_layout()
+plt.savefig(os.path.join(ASSETS_DIR, "03_correlation_heatmap.png"))
+plt.close()
+
+# - 4) Feature importances (from trained model) -
+# Try to load trained artifacts (model, scaler, selector, features)
+rf_path = os.path.join(MODELS_DIR, "best_model.joblib")
+scaler_path = os.path.join(MODELS_DIR, "scaler.joblib")
+selector_path = os.path.join(MODELS_DIR, "selector.joblib")
+features_path = os.path.join(MODELS_DIR, "features.joblib")
+
+if all(os.path.exists(p) for p in [rf_path, scaler_path, selector_path, features_path]):
+    model = joblib.load(rf_path)
+    scaler = joblib.load(scaler_path)
+    selector = joblib.load(selector_path)
+    selected_features = joblib.load(features_path)
+
+    # Prepare training matrix for importances plot (using raw df)
+    df_encoded = pd.get_dummies(df.drop(columns=["Target"]))
+    # ensure all features exist
+    for col in selected_features:
+        if col not in df_encoded.columns:
+            df_encoded[col] = 0
+    X = df_encoded[selected_features]
+    X_scaled = scaler.transform(X)
+
+    # NOTE: RandomForest feature_importances_ is over the selected features (post-SelectKBest)
+    importances = getattr(model, "feature_importances_", None)
+    if importances is not None:
+        imp_series = pd.Series(importances, index=selected_features).sort_values(ascending=True)
+        plt.figure(figsize=(8,8))
+        imp_series.tail(20).plot(kind="barh")  # top 20
+        plt.title("Top Feature Importances (Random Forest)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(ASSETS_DIR, "04_feature_importances_rf.png"))
+        plt.close()
+    else:
+        # Fallback: permutation importance (optional, heavier)
+        pass
+else:
+    # If models not trained yet, skip this step gracefully
+    with open(os.path.join(ASSETS_DIR, "README.txt"), "w") as f:
+        f.write("Train the model first to generate feature importances.\n")
+
+# - 5) OPTIONAL: SHAP summary plots -
+# Requires: pip install shap
+# WARNING: For tree models, TreeExplainer is efficient. Save plots if SHAP is installed.
+try:
+    import shap
+    if all(os.path.exists(p) for p in [rf_path, scaler_path, selector_path, features_path]):
+        model = joblib.load(rf_path)
+        scaler = joblib.load(scaler_path)
+        selector = joblib.load(selector_path)
+        selected_features = joblib.load(features_path)
+
+        df_encoded = pd.get_dummies(df.drop(columns=["Target"]))
+        for col in selected_features:
+            if col not in df_encoded.columns:
+                df_encoded[col] = 0
+        X = df_encoded[selected_features]
+        X_scaled = scaler.transform(X)
+
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_scaled)
+
+        # Bar summary (global importance)
+        plt.figure()
+        try:
+            shap.summary_plot(shap_values, X_scaled, plot_type="bar", show=False)
+        except Exception:
+            # Some SHAP versions return list per class
+            if isinstance(shap_values, list):
+                shap.summary_plot(shap_values[-1], X_scaled, plot_type="bar", show=False)
+        plt.tight_layout()
+        plt.savefig(os.path.join(ASSETS_DIR, "05_shap_summary_bar.png"))
+        plt.close()
+
+        # Beeswarm (global distribution)
+        plt.figure()
+        try:
+            shap.summary_plot(shap_values, X_scaled, show=False)
+        except Exception:
+            if isinstance(shap_values, list):
+                shap.summary_plot(shap_values[-1], X_scaled, show=False)
+        plt.tight_layout()
+        plt.savefig(os.path.join(ASSETS_DIR, "06_shap_beeswarm.png"))
+        plt.close()
+
+except ImportError:
+    # SHAP not installed, skip silently pass
+
+print(f" Saved visuals to: {ASSETS_DIR}/")
+
+# Basic visuals
+plt.figure(); df["Credit_amount"].hist(bins=30); plt.title("Credit Amount Distribution")
+plt.tight_layout(); plt.savefig(os.path.join(ASSETS_DIR, "credit_amount_dist.png"))
+
+plt.figure(); df["Age_in_years"].hist(bins=30); plt.title("Age Distribution")
+plt.tight_layout(); plt.savefig(os.path.join(ASSETS_DIR, "age_dist.png"))
+
+# If you trained already:
+try:
+    features = joblib.load(os.path.join("models", "features.joblib"))
+    importances = None
+    # Simple note: if you want RF importances, retrain quickly here or load and compute SHAP separately.
+    # This script keeps visuals simple.
+except Exception:
+    pass
+
+print(f"Saved plots to ./{ASSETS_DIR}/")
