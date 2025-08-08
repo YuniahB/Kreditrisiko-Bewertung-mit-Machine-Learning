@@ -1,0 +1,250 @@
+Overview of the German Credit Dataset
+•	Source: Provided by Prof. Dr. Hans Hofmann, University of Hamburg.
+•	Instances (Rows): 1,000
+•	Files:
+o	german.data: Original with 20 attributes (7 numerical, 13 categorical)
+o	german.data-numeric: Prepared for machine learning (24 numerical attributes)
+
+Structure and Meaning
+Attributes (selected examples)
+Attribute #	Name/Description	Type	Values
+1	Checking Account Status	Categorical	A11: < 0 DM, A12: 0–200 DM, A13: ≥ 200 DM, A14: none
+2	Duration (months)	Numerical	e.g., 12, 24
+3	Credit History	Categorical	A30: all paid back duly, A31: all at this bank, etc.
+There are 20 original attributes, and in the numeric version, there are 24 columns, indicating that categorical variables have been expanded or encoded.
+
+Load the Original Dataset
+German Credit Data (Original)
+Status_Checking_Account	Duration_Month	Credit_History
+A11	6	A34
+A12	48	A32
+A14	12	A34
+A11	42	A32
+A11	24	A33
+A14	36	A32
+✅ The original German credit dataset is now loaded and displayed.
+Here's what you’re looking at:
+•	1,000 rows of loan applicant data.
+•	20 features (mix of categorical and numerical values like age, credit amount, housing, etc.).
+•	1 target column: Credit_Risk, where:
+o	1 = Good credit
+o	2 = Bad credit
+
+4.	Prepare data for modeling
+Step 1: Explore Data Quality
+In this step, we’ll check:
+•	Missing values
+•	Duplicate rows
+•	Data types
+Why this matters:
+•	Missing or duplicate data can skew analysis.
+•	Knowing data types helps determine proper analysis or encoding.
+Let’s begin with this.
+Data Quality Summary
+	Missing_Values	Data_Type
+Status_Checking_Account	0	object
+Duration_Month	0	int64
+Credit_History	0	object
+Purpose	0	object
+Credit_Amount	0	int64
+Savings_Account_Bonds	0	object
+
+Results:
+•	No missing values across any of the 21 columns.
+•	No duplicate rows – the dataset is clean in that regard.
+•	Data types:
+o	Numerical columns like Duration_Month, Credit_Amount, and Age are int64 (good).
+o	Categorical values (like Status_Checking_Account, Purpose, etc.) are of type object, which is standard for text-based categorical data.
+
+Step 2: Summarize Variables
+Numerical Summary
+	count	mean	std
+Duration_Month	1000.0	20.903	12.058814452756375
+Credit_Amount	1000.0	3271.258	2822.7368759604406
+Installment_Rate	1000.0	2.973	1.1187146743126786
+Present_Residence	1000.0	2.845	1.1037178956568536
+Age	1000.0	35.546	11.375468574317512
+Number_Credits	1000.0	1.407	0.5776544682461002
+Categorical Summary
+	Unique_Values	Most_Common_Value
+Status_Checking_Account	4	A14
+Credit_History	5	A32
+Purpose	10	A43
+Savings_Account_Bonds	5	A61
+Employment_Since	5	A73
+
+✅ Step 2 Complete: Data Summary
+📈 Numerical Variables Summary
+•	Credit Amount ranges from 250 to 18,424, with a high standard deviation → likely skewed.
+•	Duration in months ranges from 4 to 72, averaging ~21 months.
+•	Age has a median of 33, max 75 – could explore credit behavior by age group.
+🔠 Categorical Variables Summary
+We looked at:
+•	Unique values in each column.
+•	Most common value per column.
+Example findings:
+•	Status_Checking_Account has 4 levels (A11 to A14), with A14 being most common.
+•	Purpose has multiple codes like A40, A42, etc. — we’ll later decode these for readability.
+•	Some features like Telephone or Foreign_Worker have very limited categories (binary-like).
+
+Step 3: Visualize Relationships
+We'll now create a few key plots:
+1.	Histogram of credit amounts
+2.	Boxplot of age by credit risk
+3.	Bar chart of categorical values like purpose
+4.	Risk distribution (class balance)
+Visuals help identify:
+•	Outliers
+•	Skewed distributions
+•	Class imbalance
+•	Patterns by category
+
+Step 3 Complete: Visual Insights
+Here's what the plots reveal:
+1. Credit Amount Distribution
+•	Very right-skewed: most applicants request low to moderate amounts, but a few ask for large loans (up to 18,000+).
+•	Suggests we may need log transformation for modeling.
+2. Age by Credit Risk
+•	Younger applicants tend to have higher credit risk (bad = 2).
+•	Older applicants, especially over 40, appear to have lower variance in credit risk.
+3. Purpose Frequency
+•	Codes like A40, A43, and A42 dominate. These correspond to common loan purposes.
+•	Many other codes are rarely used → candidates for grouping or simplification.
+4. Credit Risk Distribution
+•	Imbalanced:
+o	1 (Good credit) ≈ 700
+o	2 (Bad credit) ≈ 300
+•	This imbalance needs to be addressed in classification models (e.g., with resampling or class weights).
+
+Step 4: Prepare for Modeling
+We’ll:
+1.	Encode categorical variables
+2.	Normalize skewed numeric variables
+3.	Split features/target
+4.	(Optionally) Create a train/test set
+
+Why One-Hot Encoding?
+One-hot encoding transforms each categorical column into multiple binary columns — one for each unique category.
+For example, the column:
+Status_Checking_Account: [A11, A12, A13]
+becomes:
+nginx
+CopyEdit
+Status_A11 | Status_A12 | Status_A13
+     1     |     0      |     0
+     0     |     1      |     0
+Benefits:
+•	No false order imposed on categories (unlike LabelEncoding).
+•	Each column becomes a pure "yes/no" feature.
+
+One-Hot Encoded Data
+Duration_Month	Credit_Amount	Installment_Rate
+6	1169	4
+48	5951	2
+12	2096	2
+42	7882	2
+24	4870	3
+36	9055	2
+Step 4 Complete: Data is Ready for Modeling
+One-Hot Encoding Summary
+•	Original columns: 20 features (mix of numeric + categorical)
+•	After encoding: 49 total columns
+o	This includes the binary columns created from categorical variables.
+o	The target column Credit_Risk remains untouched at the end.
+
+Benefits
+•	Models can now use all features directly without needing to interpret coded values like A11, A14, etc.
+•	We used drop_first=True to avoid the dummy variable trap (perfect multicollinearity) by dropping one level per category.
+
+Models We'll Train:
+1.	Logistic Regression – baseline for binary classification.
+2.	Decision Tree Classifier – interpretable, non-linear model.
+3.	Random Forest Classifier – ensemble model for better performance.
+4.	(Optional): Support Vector Machine or Gradient Boosting
+ Here are the results:
+We trained 3 models and evaluated them on a test set of 200 applicants.
+📊 Summary Table
+Model	Accuracy	Good Precision	Bad Precision	Bad Recall
+Logistic Reg.	77%	80.5%	65.2%	50%
+Decision Tree	64%	75.8%	41.2%	46.7%
+Random Forest	77%	77.9%	71.9%	38.3%
+
+Interpretation
+•	Logistic Regression and Random Forest both reached 77% accuracy, but:
+o	Logistic Regression had better recall for bad risk (50%).
+o	Random Forest had better precision for bad risk, but lower recall (only 38%).
+•	Decision Tree performed worst, likely due to overfitting on the training set.
+
+Confusion Matrix Example (Logistic Regression)
+	Predicted Good	Predicted Bad
+Actual Good	124	16
+Actual Bad	30	30
+It caught 30 of 60 bad-risk applicants — better than random, but improvable.
+
+Stage 1: Model Tuning (Hyperparameter Optimization)
+We’ll perform Grid Search to optimize hyperparameters for:
+1.	Logistic Regression
+2.	Random Forest
+Why not Decision Tree? It tends to overfit, and Random Forest generalizes better.
+
+Tuned Logistic Regression
+•	C = 1 (default regularization strength)
+•	penalty = l2 (ridge regularization)
+•	solver = lbfgs (good for small-to-medium datasets)
+Result: No change from the default — the base model was already optimal.
+
+Tuned Random Forest
+•	n_estimators = 50 (fewer trees but likely more precise)
+•	max_depth = 20 (limits overfitting)
+•	min_samples_split = 5 (nodes need at least 5 samples to split)
+ A more regularized model — this should help with recall on minority class (bad credit).
+
+Evaluation of Tuned Models
+Tuned Logistic Regression
+•	Accuracy: 77% (no change from before)
+•	Bad Credit Recall: 50%
+•	Bad Credit Precision: 65.2%
+•	Same as before — tuning had no impact (best params were default).
+
+Tuned Random Forest
+•	Accuracy: 79.5% ⬆ (better than original 77%)
+•	Bad Credit Recall: 45% ⬆ (from 38.3%)
+•	Bad Credit Precision: 77.1% ⬆
+• Clear improvement after tuning
+Confusion Matrix (Tuned Random Forest)
+	Predicted Good	Predicted Bad
+Actual Good	132	8
+Actual Bad	33	27
+Caught 27 of 60 bad risks, with only 8 false positives — not perfect, but more balanced.
+
+Stage 2: Feature Importance (from Random Forest)
+	Feature	Importance
+1	Credit_Amount	0.12495599616994392
+0	Duration_Month	0.08768645205966229
+4	Age	0.0809127370426309
+9	Status_Checking_Account_A14	0.07837326458143748
+2	Installment_Rate	0.0368679986255128
+
+ Top 5 Most Important Features
+Rank	Feature	What it Represents	Importance
+1	Credit_Amount	Loan amount requested	12.5%
+2	Duration_Month	Repayment period	8.8%
+3	Age	Applicant age	8.1%
+4	Status_Checking_Account_A14	No checking account	7.8%
+5	Installment_Rate	Payment burden per income	3.7%
+
+Insights:
+•	Loan Size & Duration are very strong predictors — likely related to financial burden.
+•	Age matters: younger applicants may be riskier.
+•	Lack of a checking account (A14) is a red flag.
+•	Installment burden shows how much of their income goes to repayment.
+
+We're ready to:
+•	Deploy this model
+•	Apply it to new applicants
+•	Fine-tune further (e.g., balancing, feature selection)
+
+
+
+
+
