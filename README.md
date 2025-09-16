@@ -60,3 +60,36 @@ Bereitstellung: Flask REST API, Streamlit Benutzeroberfläche.
 <p align="center">
   <img src="assets/03_correlation_heatmap.png" alt="Correlation Heatmap" width="90%">
 </p>
+
+## 📊 Visualisierungen
+
+### Klassenbalance
+<p align="center">
+  <img src="assets/01_class_balance.png" alt="Class Balance" width="50%">
+</p>
+
+### Verteilungen
+<p align="center">
+  <img src="assets/02_Credit_amount_hist.png" alt="Credit Amount Distribution" width="45%">
+  <img src="assets/02_Age_in_years_hist.png" alt="Age Distribution" width="45%">
+</p>
+<p align="center">
+  <img src="assets/02_Duration_in_month_hist.png" alt="Loan Duration (Months)" width="50%">
+</p>
+
+### Korrelationen
+<p align="center">
+  <img src="assets/03_correlation_heatmap.png" alt="Correlation Heatmap" width="80%">
+</p>
+
+### Feature Importance (Random Forest)
+<p align="center">
+  <img src="assets/04_feature_importances_rf.png" alt="Feature Importances RF" width="70%">
+</p>
+
+### SHAP – Modellinterpretierbarkeit
+<p align="center">
+  <img src="assets/05_shap_summary_bar.png" alt="SHAP Summary Bar" width="70%">
+  <img src="assets/06_shap_beeswarm.png" alt="SHAP Beeswarm" width="90%">
+</p>
+
