@@ -46,3 +46,17 @@ Bereitstellung: Flask REST API, Streamlit Benutzeroberfläche.
 pandas, numpy, matplotlib, scikit-learn, shap, flask, streamlit
 
 Bereitstellung: Flask REST API, Streamlit Benutzeroberfläche.
+
+## 📊 Visuals (Preview)
+
+<p align="center">
+  <img src="assets/01_class_balance.png" alt="Class Balance" width="45%">
+  <img src="assets/02_Credit_amount_hist.png" alt="Credit Amount Distribution" width="45%">
+</p>
+<p align="center">
+  <img src="assets/02_Age_in_years_hist.png" alt="Age Distribution" width="45%">
+  <img src="assets/02_Duration_in_month_hist.png" alt="Loan Duration (Months)" width="45%">
+</p>
+<p align="center">
+  <img src="assets/03_correlation_heatmap.png" alt="Correlation Heatmap" width="90%">
+</p>
